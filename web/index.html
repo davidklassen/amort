@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>amort</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 1rem; background: #fafafa; color: #1a1a1a; }
+    h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+    .proposal { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
+    .proposal h2 { font-size: 0.95rem; margin-bottom: 0.25rem; }
+    .proposal .summary { font-size: 0.85rem; line-height: 1.4; margin-bottom: 0.5rem; }
+    .proposal .plan { font-size: 0.8rem; line-height: 1.4; color: #555; margin-bottom: 0.75rem; white-space: pre-line; }
+    .actions { display: flex; gap: 0.5rem; }
+    .actions button { padding: 0.4rem 1rem; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; font-size: 0.85rem; }
+    .actions .approve { color: #16a34a; border-color: #16a34a; }
+    .actions .reject { color: #dc2626; border-color: #dc2626; }
+    .actions .approve:hover { background: #f0fdf4; }
+    .actions .reject:hover { background: #fef2f2; }
+    .empty { text-align: center; color: #999; padding: 3rem 0; }
+    nav { display: flex; gap: 1rem; margin-bottom: 1rem; }
+    nav a { text-decoration: none; color: #666; font-size: 0.85rem; cursor: pointer; }
+    nav a.active { color: #1a1a1a; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>amort</h1>
+  <nav>
+    <a onclick="showPending()" id="nav-pending" class="active">pending</a>
+    <a onclick="showArchive()" id="nav-archive">archive</a>
+  </nav>
+  <div id="proposals"></div>
+
+  <script>
+    let currentView = 'pending';
+
+    async function load() {
+      const url = currentView === 'pending' ? '/api/proposals' : '/api/archive';
+      const res = await fetch(url);
+      const proposals = await res.json();
+      render(proposals);
+    }
+
+    function render(proposals) {
+      const el = document.getElementById('proposals');
+      if (!proposals || proposals.length === 0) {
+        el.innerHTML = '<div class="empty">no proposals</div>';
+        return;
+      }
+      el.innerHTML = proposals.map(p => `
+        <div class="proposal" id="p-${p.id}">
+          <h2>${esc(p.title)}</h2>
+          <div class="summary">${esc(p.summary)}</div>
+          <div class="plan">${esc(truncate(p.plan, 300))}</div>
+          <div class="actions">
+            ${currentView === 'pending' ? `
+              <button class="approve" onclick="approve('${p.id}')">approve</button>
+              <button class="reject" onclick="reject('${p.id}')">reject</button>
+            ` : `<span style="font-size:0.8rem;color:#999">${p.status}</span>`}
+            <button onclick="copyResume('${p.session_id}')">copy resume cmd</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function approve(id) {
+      await fetch(`/api/proposals/${id}/approve`, { method: 'POST' });
+      load();
+    }
+
+    async function reject(id) {
+      await fetch(`/api/proposals/${id}/reject`, { method: 'POST' });
+      load();
+    }
+
+    function copyResume(sessionId) {
+      navigator.clipboard.writeText(`claude --resume ${sessionId}`);
+    }
+
+    function showPending() {
+      currentView = 'pending';
+      document.getElementById('nav-pending').classList.add('active');
+      document.getElementById('nav-archive').classList.remove('active');
+      load();
+    }
+
+    function showArchive() {
+      currentView = 'archive';
+      document.getElementById('nav-archive').classList.add('active');
+      document.getElementById('nav-pending').classList.remove('active');
+      load();
+    }
+
+    function truncate(s, max) {
+      if (!s || s.length <= max) return s;
+      return s.slice(0, max) + '...';
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    load();
+  </script>
+</body>
+</html>
