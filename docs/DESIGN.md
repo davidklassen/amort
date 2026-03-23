@@ -33,32 +33,18 @@ amort start
 Each cycle makes two `claude -p` calls:
 
 **Call 1 — Target selection (cheap)**
-```bash
-claude -p "here is the repo. here are the currently pending proposals: [...].
-           pick one file or module that has the most meaningful improvement
-           opportunity. return the target path and a one-line rationale." \
-  --output-format json
-```
 
-The selector receives the list of pending proposal titles so it avoids overlap. It does not receive the archive — a re-proposal of something previously rejected is acceptable. The selector's job is to find what intuitively feels like the worst code in the repo.
+The selector receives the list of pending proposal titles so it avoids overlap. It does not receive the archive — a re-proposal of something previously rejected is acceptable. The selector's job is to find what intuitively feels like the most meaningful improvement opportunity in the repo.
 
 **Call 2 — Deep analysis (expensive)**
-```bash
-claude -p "deeply analyze {target} for improvement opportunities.
-           read the code carefully, understand the problem, consider
-           alternatives, and produce a proposal with:
-           - title: one sentence
-           - summary: 2-3 sentences, plain language, why this matters
-           - plan: full planning document — what needs to change, why,
-             how, alternatives considered, edge cases, risks" \
-  --output-format json
-```
+
+Deeply analyzes the selected area, reads the code carefully, understands the problem, considers alternatives, and produces a proposal with a title, summary, and full planning document.
 
 This session is the one that gets resumed later. Its session ID is stored with the proposal. When the user runs `amort resume <id>`, they drop into this conversation with full context and can ask questions, push back, or request more detail.
 
 ### What if nothing is found?
 
-The selector may pick a target that turns out to be clean. The deep analysis agent can return a "nothing meaningful here" result. When this happens, the loop sleeps briefly before trying again. A circuit breaker prevents burning tokens on a pristine codebase — after N consecutive empty results, the sleep interval increases.
+The deep analysis agent can return a "nothing meaningful here" result. When this happens, the loop sleeps briefly before trying again. A circuit breaker prevents burning tokens on a pristine codebase — after N consecutive empty results, the sleep interval increases.
 
 ---
 
@@ -101,16 +87,14 @@ The CLI is a thin HTTP client that talks to the daemon's REST API.
 
 ```bash
 amort start                  # start daemon (loop + web server)
-amort stop                   # stop daemon gracefully
 amort list                   # list pending proposals
 amort show <id>              # show full plan for a proposal
 amort approve <id>           # mark proposal as approved
 amort reject <id>            # mark proposal as rejected
 amort resume <id>            # runs: claude --resume <session_id>
-amort log                    # show archived (approved/rejected) proposals
 ```
 
-`amort start` is the only command that doesn't require the daemon to be running. All other commands fail with a clear message if the daemon isn't up.
+`amort start` is the only command that doesn't require the daemon to be running. All other commands fail with a clear message if the daemon isn't up. Ctrl-C stops the daemon.
 
 `amort resume <id>` is the core action. It looks up the session ID and runs `claude --resume <session_id>`, dropping you into the planning conversation. You continue where the agent left off.
 
@@ -118,49 +102,30 @@ amort log                    # show archived (approved/rejected) proposals
 
 A single-page app served by the daemon. Designed for quick scanning — works on a phone.
 
-**List view:**
-- Shows pending proposals: title, summary, plan (truncated)
-- Approve (checkmark) and reject (X) buttons on each card
-- Tinder-style swipe UX on mobile
-
-**Detail view:**
-- Full plan rendered as markdown
-- Approve / reject buttons
+- Shows proposals: title, summary, plan (truncated)
+- Approve and reject buttons on each card
 - "Copy resume command" button → copies `claude --resume <session_id>` to clipboard
-
-**Archive view:**
-- Shows approved and rejected proposals
-- Read-only, for reference
+- Filter by status (pending / all)
 
 No conversation happens in the browser. The web UI is for reading and deciding.
 
 ### REST API
 
 ```
-GET    /api/proposals              # list pending
+GET    /api/proposals              # list proposals (?status=pending|approved|rejected)
 GET    /api/proposals/:id          # get proposal detail
-PATCH  /api/proposals/:id/approve  # approve
-PATCH  /api/proposals/:id/reject   # reject
-GET    /api/archive                # list approved/rejected
-GET    /api/status                 # daemon status (running, queue size, etc.)
+POST   /api/proposals              # create proposal
+POST   /api/proposals/:id/approve  # approve
+POST   /api/proposals/:id/reject   # reject
 ```
 
 ---
 
 ## Smell Detection Strategy
 
-This is the core of the system. The target selector needs to find what matters without exhaustive analysis.
+This is the core of the system and the core challenge of the project.
 
-### Starting heuristic
-
-Feed the selector:
-- The repository file tree
-- `git log --stat` (recent churn data — what files change most)
-- The list of pending proposals (to avoid overlap)
-
-The prompt asks the agent to pick the file that "intuitively feels like the most meaningful improvement opportunity."
-
-LLMs are not naturally great at detecting problems in existing code — they're better at generating new code than critically evaluating old code. This is the core challenge of the project. Getting useful proposals will require iterating on heuristics, prompt design, and what context we feed the selector. The right combination is out there but it won't be obvious on day one. Expect the early prompts to produce generic suggestions ("this function is long") before they produce structural insights.
+LLMs are not naturally great at detecting problems in existing code — they're better at generating new code than critically evaluating old code. Getting useful proposals will require iterating on heuristics, prompt design, and what context we feed the selector. The right combination is out there but it won't be obvious on day one. Expect the early prompts to produce generic suggestions ("this function is long") before they produce structural insights.
 
 Start with the simplest version and iterate based on what the proposals actually look like.
 
