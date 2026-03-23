@@ -76,10 +76,15 @@ func (s *Store) Get(id string) (*Proposal, error) {
 	return p, nil
 }
 
-func (s *Store) ListPending() ([]Proposal, error) {
-	rows, err := s.db.Query(
-		"SELECT id, status, title, summary, plan, session_id, created_at, resolved_at FROM proposals WHERE status = 'pending' ORDER BY created_at DESC",
-	)
+func (s *Store) List(status string) ([]Proposal, error) {
+	query := "SELECT id, status, title, summary, plan, session_id, created_at, resolved_at FROM proposals"
+	var args []any
+	if status != "" {
+		query += " WHERE status = ?"
+		args = append(args, status)
+	}
+	query += " ORDER BY created_at DESC"
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

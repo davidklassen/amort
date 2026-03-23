@@ -36,7 +36,8 @@
     let currentView = 'pending';
 
     async function load() {
-      const url = currentView === 'pending' ? '/api/proposals' : '/api/archive';
+      const status = currentView === 'pending' ? 'pending' : '';
+      const url = '/api/proposals' + (status ? '?status=' + status : '');
       const res = await fetch(url);
       const proposals = await res.json();
       render(proposals);

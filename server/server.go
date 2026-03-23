@@ -32,7 +32,8 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
-	proposals, err := s.store.ListPending()
+	status := r.URL.Query().Get("status")
+	proposals, err := s.store.List(status)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
