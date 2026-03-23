@@ -51,10 +51,22 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) PendingCount() (int, error) {
-	var count int
-	err := s.db.QueryRow("SELECT COUNT(*) FROM proposals WHERE status = 'pending'").Scan(&count)
-	return count, err
+func (s *Store) PendingTitles() ([]string, error) {
+	rows, err := s.db.Query("SELECT title FROM proposals WHERE status = 'pending'")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var titles []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		titles = append(titles, t)
+	}
+	return titles, rows.Err()
 }
 
 func (s *Store) Insert(p *Proposal) error {
